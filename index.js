@@ -90,6 +90,10 @@ module.exports = function(file, opt) {
     // Fork a new worker. Give it a recluster ID and
     // also redirect all its messages to the cluster.
     function fork(wid) {
+        cluster.setupMaster({
+            exec: file,
+            args: opt.args
+        });
         var w = cluster.fork({WORKER_ID: wid});
         w._rc_wid = wid;
         w._rc_isReplaced = false;
@@ -178,16 +182,37 @@ module.exports = function(file, opt) {
 
     }
 
+    function isOurWorker(w) {
+        return (self.workers.indexOf(w) !== -1);
+    }
+
     // Redirect most events
-    function workerListening(w, adr) { emit('listening', w, adr); }
-    function workerOnline(w) { emit('online', w); }
-    function workerDisconnect(w) { emit('disconnect', w); }
-    function workerEmitExit(w) { emit('exit', w); }
+    function workerListening(w, adr) {
+        if (isOurWorker(w)) {
+            emit('listening', w, adr);
+        }
+    }
+
+    function workerOnline(w) {
+        if (isOurWorker(w)) {
+            emit('online', w);
+        }
+    }
+
+    function workerDisconnect(w) {
+        if (isOurWorker(w)) {
+            emit('disconnect', w);
+        }
+    }
+
+    function workerEmitExit(w) {
+        if (isOurWorker(w)) {
+            emit('exit', w);
+        }
+    }
 
     self.run = function() {
         if (!cluster.isMaster) return;
-        cluster.setupMaster({exec: file});
-        cluster.settings.args = opt.args;
         for (var i = 0; i < opt.workers; i++) fork(i);
 
         cluster.on('exit', workerEmitExit);
